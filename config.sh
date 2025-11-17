@@ -10,7 +10,7 @@ EXPERIMENT=PJ101_TEMPLATE
 PATH_EXPERIMENT=/mnt/run/USER/${EXPERIMENT}
 
 # Location of the run folder (MGI; e.g. /path/to/V350293965) or raw FASTQ files (Novogene)
-PATH_RAW_DATA=/mnt/storage/USER/AZ16_STZ_placenta_primeseq/a221123_AZ_Plac
+PATH_RAW_DATA=/mnt/storage/USER/PJ101_TEMPLATE/a221123_AZ_Plac
 #PATH_RAW_DATA=/mnt/storage/USER/PJ101_TEMPLATE/data_1
 ## Secondary raw data directory (optional)
 ### Use this ONLY if pooling FASTQ files from multiple Novogene sequencing runs
