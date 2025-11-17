@@ -3,18 +3,18 @@
 ############################################################
 
 # Name of the experiment (used to build folder paths)
-EXPERIMENT=AZ16_STZ_placenta_primeseq
-#EXPERIMENT=AZ11_STZ_offspring_adipose_16wk_primeseq
+EXPERIMENT=PJ101_TEMPLATE
+#EXPERIMENT=PJ101_TEMPLATE
 
 # Base directory where all output for this experiment will be stored
-PATH_EXPERIMENT=/mnt/run/paulo/${EXPERIMENT}
+PATH_EXPERIMENT=/mnt/run/USER/${EXPERIMENT}
 
 # Location of the run folder (MGI; e.g. /path/to/V350293965) or raw FASTQ files (Novogene)
-PATH_RAW_DATA=/mnt/storage/paulo/AZ16_STZ_placenta_primeseq/a221123_AZ_Plac
-#PATH_RAW_DATA=/mnt/storage/paulo/AZ11_STZ_offspring_adipose_16wk_primeseq/AZ_16wk_Adip_Lib
+PATH_RAW_DATA=/mnt/storage/USER/AZ16_STZ_placenta_primeseq/a221123_AZ_Plac
+#PATH_RAW_DATA=/mnt/storage/USER/PJ101_TEMPLATE/data_1
 ## Secondary raw data directory (optional)
 ### Use this ONLY if pooling FASTQ files from multiple Novogene sequencing runs
-#PATH_RAW_DATA2=/mnt/storage/paulo/AZ11_STZ_offspring_adipose_16wk_primeseq/AZ_16wk_Adip_Lib_2
+#PATH_RAW_DATA2=/mnt/storage/USER/PJ101_TEMPLATE/data_2
 
 ############################################################
 # Sequencing platform
