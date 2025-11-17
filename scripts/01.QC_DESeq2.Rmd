@@ -1,0 +1,1253 @@
+---
+title: "QC and DESeq2"
+subtitle: "Prime-seq analysis"
+author: "Data analysis: Paulo Jannig | Karolinska Institutet"
+date: "`r paste('Last update:', format(Sys.time(), '%B %d, %Y'))`"
+output: 
+  html_document:
+    toc: true
+    toc_float: 
+      collapsed: false
+    toc_depth: 3
+    number_sections: true
+    theme: spacelab
+    highlight: default
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+```{r}
+print(setwd(dirname(rstudioapi::getSourceEditorContext()$path)))
+```
+
+
+```{r}
+# define variables ==========================================
+experiment_ID <- "PJ101_TEMPLATE"
+filename_prefix <- "" # leave empty if not necessary
+species <- "mouse" # mouse, human, pig, rat
+ensembl_version <- 115 # define ensembl release version. We've been using:
+                        # 102 for human
+                        # 107 for mouse
+            
+file_formats <- list(
+  #"png",
+  "pdf"
+)
+
+# load libraries
+required_Packages_Install <- c(
+  "tidyverse",
+  "DESeq2",
+  "ggpubr",
+  "RColorBrewer",
+  "ggrepel",
+  "ggtext",
+  "biomaRt",
+  "scales",
+  "writexl",
+  "readxl",
+  "factoextra",
+  "limma"
+)
+
+for(Package in required_Packages_Install){
+  if(!require(Package,character.only = TRUE)) { 
+    BiocManager::install(Package, dependencies=TRUE)
+  }
+  library(Package,character.only = TRUE)
+}
+
+# source custom functions
+source("load_functions.R") # source custom functions
+```
+
+```{bash}
+mkdir -p \
+  ../02.results/deseq2/ \
+  ../03.figures \
+  ../04.supplements
+```
+
+# Import data
+```{r}
+counts <- readRDS(paste0("../02.results/zUMIs/",experiment_ID,".dgecounts.rds"))
+
+metadata <- read_excel("../01.metadata/sampleInfo.xlsx")
+#metadata <- read.csv("../01.metadata/sampleinfo.txt", sep = "\t", header = TRUE)
+
+#gene.info <- read.csv(paste0("../02.results/zUMIs/",experiment_ID,".gene_names.txt"), sep = "\t")
+
+kept_barcodes_binned <- read.table(paste0("../00.reports/zUMIs/",experiment_ID,"kept_barcodes_binned.txt"),
+                             sep = ",", header = T) %>%
+  dplyr::rename(barcode = XC,
+                Reads = n)
+
+```
+
+
+
+# Metadata
+```{r}
+colnames(metadata)
+```
+
+```{r}
+colnames(metadata)
+unique(metadata$Group)
+# unique(metadata$Sex)
+```
+
+If needed, use this to remove samples/groups
+Removing:
+```{r}
+# metadata <- metadata %>%
+#   dplyr::filter(Sex != "Male")
+```
+
+
+Arrange metadata
+```{r}
+metadata <- metadata %>%
+  mutate(
+    Group = factor(Group, levels = c(
+      "Control",
+      "STZ"
+      ))
+  ) %>%
+  arrange(Group)
+
+levels(metadata$Group)
+```
+
+
+# QC sequencing depth
+Remove samples with low number of sequencing reads
+
+Check number of samples:
+```{r}
+unique(metadata$sample)
+length(unique(metadata$sample))
+```
+
+define color palette:
+```{r}
+palette_groups <- brewer.pal(n = 8, name = "Dark2")
+# palette_groups <- brewer.pal(n = 12, name = "Paired")
+# palette_groups <- c("black", "#1F78B4")
+```
+
+## Number of reads per sample
+```{r}
+readspersample <- left_join(metadata, kept_barcodes_binned, by = "barcode") %>%
+  mutate(sample = fct_reorder(sample, Reads, .desc = TRUE))
+```
+
+```{r}
+y_max <- max(readspersample$Reads)
+y_min <- min(readspersample$Reads)
+y_lim <- y_max * 1.1
+sample_number <- length(readspersample$sample)
+
+# Create the bar plot
+ggplot(readspersample, aes(x = sample, y = Reads, fill = Group)) +
+  geom_bar(stat = "identity") +
+  geom_hline(yintercept = y_max, linetype = "dashed", size = 0.25) +
+  geom_hline(yintercept = y_min, linetype = "dashed", size = 0.25) +
+  annotate("text", x = 1, y = y_max, label = paste("Max:", scales::comma(y_max)),
+           vjust = -0.3, hjust = 0, size = 6 / ggplot2:::.pt) +
+  annotate("text", x = sample_number, y = y_min, label = paste("Min:", scales::comma(y_min)), 
+           vjust = 1.5, hjust = 1, size = 6 / ggplot2:::.pt) +
+  labs(x = "Sample", y = "Reads", title = "Reads per Sample by Group") +
+  ggplot2::scale_fill_manual(values = palette_groups) +
+  gg_theme() + 
+  theme(
+    axis.text.x = ggtext::element_markdown(angle = 45, hjust = 1),
+    legend.position = "top"
+  )  + 
+  coord_cartesian(xlim = c(0, sample_number+1), ylim = c(0, y_lim), expand = FALSE)
+```
+
+Save plot
+```{r}
+filename <- "QC_Reads_per_sample"
+
+for (file_format in file_formats) {
+  ggsave_fixed(
+    plot = ggplot2::last_plot() + gg_theme() + 
+      theme(axis.text.x = ggtext::element_markdown(angle = 45, hjust = 1),
+            legend.position = "top"
+            ), 
+    paste0(
+      "../03.figures/",
+      filename_prefix,
+      filename, ".",
+      file_format
+    ),
+    units = "mm",
+    plot_width = sample_number*3,
+    plot_height = 25,
+    width = sample_number*5,
+    height = 60
+  )
+}
+```
+
+
+If needed, use this to remove samples
+```{r}
+metadata <- metadata %>%
+  #dplyr::filter(Sample != "F5_1") %>%
+  #dplyr::filter(Sample != "")
+  filter(!(sample %in% c("M2-2", 
+                         "M1-3")))
+
+```
+
+# Make inex matrix (Counts data frame)
+```{r}
+frds_inex <- as.matrix(counts$umicount$inex$all)
+# rownames(frds_inex) <- factor(rownames(frds_inex),
+#                                 levels = gene.info$gene_id,
+#                                 labels = gene.info$gene_id)
+frds_inex.sum <- aggregate(frds_inex, 
+                             list(row.names(frds_inex)), 
+                             sum)
+rownames(frds_inex.sum) <- frds_inex.sum$Group.1
+frds_inex.sum$Group.1 <- NULL
+
+counts.df <- frds_inex.sum %>%
+  dplyr::select(metadata$barcode) %>%
+  rename_all(~metadata$sample)
+```
+
+Check if there are duplicated ensembl_gene_id
+```{r}
+duplicated_rows <- data.frame(rownames(counts.df)[duplicated(str_remove(rownames(counts.df), "\\..*"))])
+duplicated_rows
+```
+
+Removing genes ending with _PAR_Y
+```{r}
+counts.df <- counts.df[!grepl("_PAR_Y", rownames(counts.df)), ]
+```
+
+Remove gene version
+```{r}
+rownames(counts.df) <- str_remove(rownames(counts.df), "\\..*")
+head(counts.df)
+```
+
+
+# DESeq2
+make sure columns of the count matrix and the rows of the column data (information about samples) are in the same order
+```{r}
+colnames(counts.df)
+metadata$sample
+colnames(counts.df)==metadata$sample
+
+metadata$barcode
+```
+
+returns the names of all columns in metadata that are factors.
+```{r}
+names(metadata)[sapply(metadata, is.factor)]
+```
+
+
+```{r}
+# DEseq2
+dds <- DESeqDataSetFromMatrix(
+  countData = counts.df,
+  colData = metadata,
+  design = ~ Group
+  # design = ~ Sex + Group + Sex:Group
+  # design = ~ Donor + Treatment + Time
+  # design = ~ Donor + Treatment + Time + Treatment:Time
+
+
+)
+## calculate size factor
+dds <- estimateSizeFactors(dds)
+```
+
+Check how many genes in total and levels
+```{r}
+nrow(dds)
+levels(dds$Group)
+```
+
+Count how many genes with 0 counts (TRUE)
+```{r}
+table(rowSums(assay(dds, "counts")) == 0)
+```
+
+## biomaRt annotation
+retrieve gene ensembl annotation 
+
+```{r}
+# If biomaRt fails, check:
+# https://stackoverflow.com/questions/77370659/error-failed-to-collect-lazy-table-caused-by-error-in-db-collect-using
+
+# # Run
+# install.packages("devtools")
+#devtools::install_version("dbplyr", version = "2.3.4")
+
+# Retrieve the full list of ensembl_gene_id with attributes of interest
+annotation <- biomaRt::getBM(
+  attributes = c(
+    "ensembl_gene_id", # Get the Ensembl gene ID
+    symbol, # Gene symbol
+    #"external_gene_name", # Gene symbol
+    "chromosome_name", # Chromosome number
+    "gene_biotype" # Gene biotype (protein-coding, lncRNA, etc.)
+  ),
+  mart = useEnsembl(
+    biomart = "ensembl", # Use the "ensembl" BioMart database
+    mirror = "useast",
+    dataset = dataset, # Specify the dataset
+    version = ensembl_version # Specify the Ensembl version
+  )
+)
+
+mito_genes <- annotation %>%
+  filter(chromosome_name == "MT")
+
+rRNA_genes <- annotation %>%
+  filter(str_detect(gene_biotype, "^rRNA"))
+
+RiboRelated_genes <- annotation %>%
+  filter(str_detect(!!sym(symbol), "(?i)^RPL|^RPS"))
+
+```
+
+# QC DESeq2
+
+## QC summary table
+Consider adjusting for number of factors (e.g. Group × Time) and using facet_wrap(~Factor) for clearer visualization
+```{r}
+qc.tb <- data.frame(
+  Sample = metadata$sample,
+  gene_number = colSums(counts(dds) > 0),
+  MT_proportion = colSums(counts(dds)[rownames(dds) %in% mito_genes$ensembl_gene_id, ]) / colSums(counts(dds)) * 100,
+  rRNA_proportion = colSums(counts(dds)[rownames(dds) %in% rRNA_genes$ensembl_gene_id, ]) / colSums(counts(dds)) * 100,
+  Rb_proportion = colSums(counts(dds)[rownames(dds) %in% RiboRelated_genes$ensembl_gene_id, ]) / colSums(counts(dds)) * 100,
+  Group = factor(metadata$Group, levels = levels(metadata$Group))
+)
+
+```
+
+```{r}
+# Define a plotting function
+plot_qc_metric <- function(data, 
+                           metric, 
+                           y_label) {
+
+  y_values <- data[[metric]]
+  y_max <- max(y_values, na.rm = TRUE)
+  y_min <- min(y_values, na.rm = TRUE)
+  y_lim <- ceiling(y_max * 1.1)
+  sample_number <- nrow(data)
+
+  ggplot(data, aes(x = Sample, y = .data[[metric]], fill = Group)) +
+    geom_bar(stat = "identity") +
+    geom_hline(yintercept = y_max, linetype = "dashed", size = 0.25) +
+    geom_hline(yintercept = y_min, linetype = "dashed", size = 0.25) +
+    annotate("text",
+      x = 1, y = y_max,
+      label = paste("Max:", scales::comma(y_max, decimal.mark = ".", big.mark = "")),
+      vjust = -0.3, hjust = 0, size = 6 / ggplot2:::.pt
+    ) +
+    annotate("text",
+      x = sample_number, y = y_min,
+      label = paste("Min:", scales::comma(y_min, decimal.mark = ".", big.mark = "")),
+      vjust = 1.5, hjust = 1, size = 6 / ggplot2:::.pt
+    ) +
+    labs(x = "Sample", y = y_label, title = y_label) +
+    #scale_fill_brewer(palette = palette, name = "Group") +
+    ggplot2::scale_fill_manual(values = palette_groups) +
+    gg_theme() +
+    theme(
+      axis.text.x = ggtext::element_markdown(angle = 45, hjust = 1),
+      legend.position = "top"
+    ) +
+    coord_cartesian(xlim = c(0, sample_number + 1), ylim = c(0, y_lim), expand = FALSE)
+}
+```
+
+```{r}
+# Plot gene number
+plot_gene_number <- plot_qc_metric(qc.tb, "gene_number", "Detected Genes")
+# Plot MT proportion
+plot_mt <- plot_qc_metric(qc.tb, "MT_proportion", "Mitochondrial %")
+# Plot rRNA proportion
+plot_rrna <- plot_qc_metric(qc.tb, "rRNA_proportion", "rRNA %")
+# Plot Rb proportion
+plot_rb <- plot_qc_metric(qc.tb, "Rb_proportion", "Ribo-related proteins %")
+```
+
+
+```{r}
+# Arrange plots together
+ggpubr::ggarrange(plot_gene_number, 
+                  plot_mt, 
+                  plot_rrna, 
+                  plot_rb, 
+                  ncol = 2, 
+                  nrow = 2, 
+                  common.legend = TRUE,
+                  widths = 1,
+                  heights = 1,
+                  hjust = -1,
+                  align = "hv")
+
+```
+
+Save plot
+```{r}
+filename <- "QC_plot"
+for (file_format in file_formats) {
+  ggsave_fixed(
+    paste0(
+      "../03.figures/",
+      filename_prefix,
+      filename, ".",
+      file_format
+    ),
+    units = "mm",
+    plot_width = length(qc.tb$Sample)*10,
+    plot_height = 90,
+    width = (length(qc.tb$Sample)*10)*1.1,
+    height = 100 
+  )
+}
+```
+
+## QC Filtering
+```{r}
+sprintf("original gene number: %s; original sample number: %s", nrow(dds), ncol(dds))
+```
+Create QC table and filter samples by detected genes % mitochondrial and rRNA content
+```{r}
+cutoff_gene_number <- 12000
+cutoff_mt_prop <- 30
+cutoff_rRNA_prop <- 15
+
+qc.tb <- qc.tb %>%
+  mutate(
+    keep = 
+      gene_number >= cutoff_gene_number & 
+      MT_proportion <= cutoff_mt_prop & 
+      rRNA_proportion <= cutoff_rRNA_prop
+  )
+qc.tb
+```
+
+Remove samples with low number of detected genes and/or high mtDNA/rRNA content
+```{r}
+dds.filter.sample <- dds[, qc.tb$keep]
+setdiff(colnames(dds), colnames(dds.filter.sample))
+```
+
+Filter genes with low counts
+
+Choose one of the options below:
+```{r}
+# # Option 1
+# ## keep genes with non-zero normalized counts
+# keep.genes <- rownames(dds.filter.sample)[
+#   which(
+#     rowSums(counts(dds.filter.sample, normalized=TRUE)) >= 1
+#     )
+# ]
+# sprintf("Keep genes with non-zero normalized counts")
+
+# Option 2
+## Keep genes whose total normalized counts across all samples are at least "cutoff"
+# cutoff <- 20 # set cutoff
+# keep.genes <- rownames(dds.filter.sample)[
+#   which(
+#     rowSums(counts(dds.filter.sample, normalized=TRUE)) >= cutoff
+#     )
+# ]
+# sprintf("Keep genes whose total normalized counts across all samples are at least %s", cutoff)
+
+# # Option 3
+# ## Keep genes where at least X samples (number_of_samples) have normalized counts ≥ "cutoff"
+# number_of_samples <- 4 # set samples cutoff
+# cutoff <- 10 # set counts cutoff
+# keep.genes <- rownames(dds.filter.sample)[
+#   which(
+#     rowSums(counts(dds.filter.sample, normalized=TRUE) >= cutoff ) >= number_of_samples
+#     )
+# ]
+# sprintf("Keep genes where at least %s samples have normalized counts ≥ %s", number_of_samples, cutoff)
+
+# # Option 4
+## Keep genes where at least X samples (smallestGroupSize) have normalized counts ≥ "cutoff" (increase threshold if necessary)
+cutoff <- 1 # set cutoff
+
+### Calculte smallestGroupSize
+smallestGroupSize <- metadata %>%
+  dplyr::group_by(Group) %>%
+  #dplyr::group_by(group, genotype) %>%
+  dplyr::summarise(samples = dplyr::n()) %>%
+  pull(samples) %>%
+  min()
+sprintf('smallest group size: %s', smallestGroupSize)
+
+keep.genes <- rownames(dds.filter.sample)[
+  which(rowSums(counts(dds.filter.sample, normalized = TRUE) >= cutoff) >= smallestGroupSize)
+]
+sprintf('number of genes expressed in more than %s samples with counts greater than or equal to %s: %s', smallestGroupSize, cutoff, length(keep.genes))
+
+```
+
+Remove unwanted gene categories
+```{r}
+excluded.genes <- union_all(
+  mito_genes$ensembl_gene_id, # removes mitochondrial-encoded genes
+  rRNA_genes$ensembl_gene_id # remove rRNA genes
+  # RiboRelated_genes$ensembl_gene_id # Optionally, remove ribosome-related genes
+)
+sprintf("%s genes were removed", length(excluded.genes))
+```
+
+Final set of retained genes
+```{r}
+retained_genes <- setdiff(keep.genes, excluded.genes)
+sprintf("%s genes were retained", length(retained_genes))
+```
+
+Filter the DESeqDataSet
+```{r}
+dds.filter <- dds.filter.sample[retained_genes, ]
+sprintf('retained gene number: %s; retained sample number: %s', nrow(dds.filter), ncol(dds.filter))
+#dim(dds.filter)
+```
+
+check which samples were removed
+```{r}
+setdiff(dds$sample, dds.filter$sample)
+```
+
+update metadata:
+```{r}
+metadata <- metadata %>%
+  dplyr::filter(!(sample %in% setdiff(dds$sample, dds.filter$sample)))
+```
+
+save metadata
+```{r}
+filename <- "metadata"
+write.csv(metadata, paste0(
+  "../01.metadata/",
+  filename_prefix,
+  filename, ".csv"
+),
+row.names = F, quote = F
+)
+
+saveRDS(metadata, paste0(
+  "../01.metadata/",
+  filename_prefix,
+  filename,
+  ".Rds"
+))
+```
+
+## Final Metadata table
+```{r}
+filename <- "metadata"
+metadata %>% DT::datatable(
+  extensions = "Buttons",
+  options = list(
+    scrollX = TRUE,
+    pageLength = nrow(metadata),
+    dom = "Blfrtip",
+    buttons = list(
+      list(extend = "csv", filename = paste0(filename_prefix, filename)),
+      list(extend = "excel", filename = paste0(filename_prefix, filename))
+    )
+  )
+)
+```
+
+## QC summary table after filtering
+```{r}
+
+qc.tb_filtered <- data.frame(
+  Sample = metadata$sample,
+  gene_number = colSums(counts(dds.filter) > 0),
+  MT_proportion = colSums(counts(dds.filter)[rownames(dds.filter) %in% mito_genes$ensembl_gene_id, ]) / colSums(counts(dds.filter)) * 100,
+  rRNA_proportion = colSums(counts(dds.filter)[rownames(dds.filter) %in% rRNA_genes$ensembl_gene_id, ]) / colSums(counts(dds.filter)) * 100,
+  Rb_proportion = colSums(counts(dds.filter)[rownames(dds.filter) %in% RiboRelated_genes$ensembl_gene_id, ]) / colSums(counts(dds.filter)) * 100,
+  Group = factor(metadata$Group, levels = levels(metadata$Group))
+)
+
+```
+
+```{r}
+# Plot gene number
+plot_gene_number <- plot_qc_metric(qc.tb_filtered, "gene_number", "Detected Genes")
+# Plot MT proportion
+plot_mt <- plot_qc_metric(qc.tb_filtered, "MT_proportion", "Mitochondrial %")
+# Plot rRNA proportion
+plot_rrna <- plot_qc_metric(qc.tb_filtered, "rRNA_proportion", "rRNA %")
+# Plot Rb proportion
+plot_rb <- plot_qc_metric(qc.tb_filtered, "Rb_proportion", "Ribo-related proteins %")
+```
+
+```{r}
+# Arrange plots together
+ggpubr::ggarrange(plot_gene_number, 
+                  plot_mt, 
+                  plot_rrna, 
+                  plot_rb, 
+                  ncol = 2, 
+                  nrow = 2, 
+                  common.legend = TRUE,
+                  widths = 1,
+                  heights = 1,
+                  hjust = -1,
+                  align = "hv")
+
+```
+
+Save plot
+```{r}
+filename <- "QC_plot_filtered"
+for (file_format in file_formats) {
+  ggsave_fixed(
+    paste0(
+      "../03.figures/",
+      filename_prefix,
+      filename, ".",
+      file_format
+    ),
+    units = "mm",
+    plot_width = length(qc.tb$Sample)*10,
+    plot_height = 90,
+    width = (length(qc.tb$Sample)*10)*1.1,
+    height = 100 
+  )
+}
+```
+
+# DESeq2
+
+```{r}
+design(dds.filter)
+
+dds <- DESeq(dds.filter)
+
+# dds <- DESeq(dds.filter, 
+#              betaPrior = FALSE)
+resultsNames(dds)
+```
+
+Check levels
+```{r}
+levels(dds$Group)
+```
+
+
+if necessary, change factor order:
+```{r}
+# dds$Group <- factor(
+#   dds$Group,
+#   levels = c(
+#     "STZ",
+#     "Control"
+#   )
+# )
+# levels(dds$Group)
+
+```
+
+
+save dds file
+```{r}
+filename <- "dds"
+saveRDS(dds, file = paste0(
+  "../02.results/deseq2/",
+  filename_prefix,
+  filename, ".Rds"
+))
+```
+
+## biomaRt annotation
+retrieve gene ensembl annotation 
+
+```{r}
+# If biomaRt fails, check:
+# https://stackoverflow.com/questions/77370659/error-failed-to-collect-lazy-table-caused-by-error-in-db-collect-using
+
+# # Run
+# install.packages("devtools")
+#devtools::install_version("dbplyr", version = "2.3.4")
+
+# Retrieve the list of attributes for genes in dds
+
+annotation <- biomaRt::getBM(
+  filters = "ensembl_gene_id",
+  attributes = c(
+    "ensembl_gene_id", # Get the Ensembl gene ID
+    symbol, # Gene symbol
+    #"external_gene_name", # Gene symbol
+    "chromosome_name", # Chromosome number
+    "gene_biotype" # Gene biotype (protein-coding, lncRNA, etc.)
+  ),
+  values = rownames(dds),
+  mart = useEnsembl(
+    biomart = "ensembl", # Use the "ensembl" BioMart database
+    dataset = dataset, # Specify the dataset
+    # mirror = "useast",
+    version = ensembl_version # Specify the Ensembl version
+  )
+)
+
+```
+
+
+Save biomaRt annotation
+```{r}
+filename <- "biomart_annotation"
+write.csv(annotation, paste0(
+  "../02.results/deseq2/",
+  filename_prefix,
+  filename,
+  ".csv"
+),
+row.names = F, quote = F
+)
+
+saveRDS(annotation, paste0(
+  "../02.results/deseq2/",
+  filename_prefix,
+  filename,
+  ".Rds"
+))
+```
+
+
+## Normalized counts
+
+```{r}
+normalized_counts <- as.data.frame(counts(dds, normalized = TRUE))
+
+# Join with annotation and relocate relevant columns
+normalized_counts <- normalized_counts %>%
+  rownames_to_column("ensembl_gene_id") %>%
+  dplyr::left_join(annotation, by = "ensembl_gene_id") %>%
+  relocate(all_of(c(symbol, "gene_biotype", "chromosome_name")), .after = "ensembl_gene_id")
+  # relocate(symbol, gene_biotype, chromosome_name, gene_biotype, .after = ensembl_gene_id)
+
+# Replace empty gene symbols by ensembl_gene_id
+normalized_counts[, symbol] <- ifelse(normalized_counts[, symbol] == "" | is.na(normalized_counts[, symbol]), 
+                                   normalized_counts$ensembl_gene_id, normalized_counts[, symbol])
+
+# Ensure ensembl_gene_id isn't blank by setting it to symbol where needed
+normalized_counts$ensembl_gene_id <- ifelse(normalized_counts$ensembl_gene_id == "", 
+                                            normalized_counts[, symbol], normalized_counts$ensembl_gene_id)
+
+# Handle NA values for ensembl_gene_id by replacing them with symbol
+na_symbol <- is.na(normalized_counts$ensembl_gene_id)
+normalized_counts[na_symbol, "ensembl_gene_id"] <- normalized_counts[na_symbol, symbol]
+
+```
+
+Save normalized counts
+```{r}
+filename <- "deseq2_normalized_counts"
+write.csv(normalized_counts, paste0(
+  "../02.results/deseq2/",
+  filename_prefix,
+  filename,
+  ".csv"
+),
+row.names = F, quote = F
+)
+
+saveRDS(normalized_counts, paste0(
+  "../02.results/deseq2/",
+  filename_prefix,
+  filename,
+  ".Rds"
+))
+```
+
+```{r echo=FALSE}
+cat("Saved file:", paste0(
+  "../02.results/deseq2/",
+  filename_prefix,
+  filename,
+  ".csv"
+))
+```
+
+## log2 Normalized counts
+```{r}
+normalized_counts.log2 <- as.data.frame(log2(counts(dds, normalized=TRUE))) %>%
+  rownames_to_column("ensembl_gene_id") %>%
+  dplyr::left_join(annotation, by = "ensembl_gene_id") %>%
+  relocate(all_of(c(symbol, "gene_biotype", "chromosome_name")), .after = "ensembl_gene_id")
+  # relocate(symbol, gene_biotype, chromosome_name, gene_biotype, .after = ensembl_gene_id)
+
+# replace empty gene symbols by ensembl_gene_id
+normalized_counts.log2[, symbol] <- ifelse(normalized_counts.log2[, symbol] == "", normalized_counts.log2$ensembl_gene_id, normalized_counts.log2[, symbol])
+normalized_counts.log2[, "ensembl_gene_id"] <- ifelse(normalized_counts.log2[, "ensembl_gene_id"] == "", 
+                                normalized_counts.log2[, symbol], normalized_counts.log2[, "ensembl_gene_id"])
+
+
+# replace NA gene symbols by ensembl_gene_id
+na_symbol <- is.na(normalized_counts.log2[, "ensembl_gene_id"])
+normalized_counts.log2[na_symbol, "ensembl_gene_id"] <- normalized_counts.log2[na_symbol, symbol]
+```
+
+Save log2 normalized counts
+```{r}
+filename <- "deseq2_normalized_counts_log2"
+write.csv(normalized_counts.log2, paste0(
+  "../02.results/deseq2/",
+  filename_prefix,
+  filename,
+  ".csv"
+),
+row.names = F, quote = F
+)
+
+saveRDS(normalized_counts.log2, paste0(
+  "../02.results/deseq2/",
+  filename_prefix,
+  filename,
+  ".Rds"
+))
+```
+
+```{r echo=FALSE}
+cat("Saved file:", paste0(
+  "../02.results/deseq2/",
+  filename_prefix,
+  filename,
+  ".csv"
+))
+```
+
+# Supplementary table
+```{r}
+filename <- "deseq2_normalized_counts"
+excel <- list(
+  normalized_counts = normalized_counts
+)
+write_xlsx(excel, paste0(
+  "../04.supplements/",
+  filename_prefix,
+  filename,
+  ".xlsx"
+))
+
+filename <- "deseq2_normalized_counts_log2"
+excel <- list(
+  log2_normalized_counts = normalized_counts.log2
+)
+write_xlsx(excel, paste0(
+  "../04.supplements/",
+  filename_prefix,
+  filename,
+  ".xlsx"
+))
+```
+
+# PCA plots
+
+## for PCA analysis
+calculate size factor
+```{r}
+dds <- estimateSizeFactors(dds)
+```
+
+Quick PCAs
+```{r}
+vsd <- DESeq2::vst(dds, blind = TRUE)
+DESeq2::plotPCA(vsd, intgroup = c("Group"))
+# DESeq2::plotPCA(vsd, intgroup = c("Group", "Sex"))
+```
+
+
+```{r}
+rld <- DESeq2::rlog(dds, blind = TRUE)
+DESeq2::plotPCA(rld, intgroup = c("Group"))
+# DESeq2::plotPCA(vsd, intgroup = c("Group", "Sex"))
+```
+
+## vsd
+DESeq2::plotPCA uses ntop=500 top features by variance
+
+```{r}
+vsd <- DESeq2::vst(dds, blind = TRUE)
+```
+
+Define factors - adjust factor1 and factor2 according to the number of factors
+```{r}
+design(dds)
+```
+
+```{r}
+factor1 <- "Group"
+# factor2 <- "Sex"
+
+```
+
+Check how many variable within factors
+```{r}
+levels(dds$Group)
+# levels(dds$Sex)
+```
+
+Choose color palette
+```{r}
+palette_groups <- brewer.pal(n = 8, name = "Dark2")
+# palette_groups <- brewer.pal(n = 12, name = "Paired")
+# palette_groups <- c("black", "#1F78B4")
+```
+
+% total variance explained by each principal component
+```{r}
+pca <- prcomp(t(assay(vsd)))
+fviz_screeplot(pca, ncp = 10) + gg_theme()
+```
+
+With top 500 variable gene selection (as in DESeq2::plotPCA)
+```{r}
+top_var_genes <- head(order(rowVars(assay(vsd)), decreasing = TRUE), 500)
+pca <- prcomp(t(assay(vsd)[top_var_genes, ]))
+fviz_screeplot(pca, ncp = 10) + gg_theme()
+```
+
+
+```{r}
+## Calculate PCA data
+pca_data <- DESeq2::plotPCA(vsd, 
+                            intgroup = factor1,
+                            # intgroup = c(factor1,factor2),
+                            returnData = TRUE,
+                            ntop = 500,
+                            #ntop = nrow(assay(vsd)) # use this to include all genes, not only top 500
+                            )
+### Calculating the percentage of variance explained by PC1 and PC2
+percent_var <- round(100 * attr(pca_data, "percentVar"))
+
+segments <- pca_data %>%
+  dplyr::group_by(!!sym(factor1)) %>%
+  # dplyr::group_by(!!sym(factor1), !!sym(factor2)) %>%
+  dplyr::summarise(xend = mean(PC1), yend = mean(PC2))
+# pca_data <- merge(pca_data, segments, by = c(factor1, factor2))
+pca_data <- merge(pca_data, segments, by = factor1)
+```
+
+### with segments
+```{r}
+pca_plot <- pca_data %>%
+  ggplot2::ggplot(ggplot2::aes(PC1, PC2)) +
+    ggplot2::geom_point(
+    data = segments,
+    ggplot2::aes(
+      x = xend, y = yend,
+      color = !!sym(factor1)
+    ),
+    size = 0.5
+  ) +
+  ggplot2::geom_segment(
+    ggplot2::aes(
+      x = PC1, y = PC2, xend = xend, yend = yend,
+      fill = !!sym(factor1),
+      color = !!sym(factor1)
+    ),
+    linewidth = 0.3,
+    linetype = "solid"
+  ) +
+  ggplot2::geom_point(
+    aes(
+      color = !!sym(factor1),
+      fill = !!sym(factor1),
+      # shape = !!sym(factor2)
+    ),
+    size = 2,
+    #shape = 21,
+    # color = "black",
+  ) +
+  ggplot2::xlab(paste0("PC1: ", percent_var[1], "% variance")) +
+  ggplot2::ylab(paste0("PC2: ", percent_var[2], "% variance")) +
+  gg_theme() +
+  ggplot2::theme(legend.position = "top") +
+  ggplot2::scale_shape_manual(values = c(21:25)) +
+  # ggplot2::scale_color_manual(values = viridis::viridis(3 + 1)) +
+  # ggplot2::scale_fill_manual(values = viridis::viridis(3 + 1)) +
+  ggplot2::scale_color_manual(values = palette_groups) +
+  ggplot2::scale_fill_manual(values = palette_groups) +
+  scale_x_continuous(expand = c(0.1, 0.1)) +
+  scale_y_continuous(expand = c(0.1, 0.1)) +
+  ggtitle("**Principal component analysis**")
+pca_plot 
+```
+
+Add sample labels
+```{r}
+pca_plot + geom_text_repel(aes(label = name),
+  size = 3 / ggplot2:::.pt,
+  nudge_x = 1,
+  nudge_y = -1,
+  min.segment.length = 0,
+  # force = 3,
+  # box.padding = unit(0.1, "lines"),
+  segment.size = 0.25,
+  segment.colour = "black"
+)
+```
+
+
+
+Save plot
+```{r}
+filename <- "PCA_plot_vsd_segment"
+for (file_format in file_formats) {
+  ggsave_fixed(
+    paste0(
+      "../03.figures/",
+      filename_prefix,
+      filename, ".",
+      file_format
+    ),
+    units = "mm",
+    plot_width = 30,
+    plot_height = 30,
+    width = 50,
+    height = 50
+  )
+}
+```
+
+
+### with segments + ellipse
+```{r}
+
+pca_plot + ggforce::geom_mark_ellipse(
+  aes(
+    fill = !!sym(factor1),
+    # group = interaction(!!sym(factor1), !!sym(factor2)),  # separate ellipses when having 2 factors design
+    color = !!sym(factor1)
+  ),
+  expand = unit(1, "mm"),
+  size = 0,
+  tol = 0.001
+)
+```
+
+```{r}
+
+pca_plot +
+  stat_ellipse(
+    data = pca_data,
+    aes(x = PC1, y = PC2,
+        color = !!sym(factor1),
+        # group = interaction(!!sym(factor1), !!sym(factor2)),
+        fill  = !!sym(factor1)),
+    type = "norm", 
+    level = 0.68, 
+    geom = "polygon",
+    alpha = 0.3, 
+    color = NA, 
+    #position = "identity",
+    inherit.aes = TRUE
+     )
+```
+
+
+Save plot
+```{r}
+filename <- "PCA_plot_vsd_segment_ellipse"
+for (file_format in file_formats) {
+  ggsave_fixed(
+    paste0(
+      "../03.figures/",
+      filename_prefix,
+      filename, ".",
+      file_format 
+    ),
+    units = "mm",
+    plot_width = 30,
+    plot_height = 30,
+    width = 50,
+    height = 50
+  )
+}
+```
+
+
+
+
+### only ellipses
+```{r}
+pca_plot <- pca_data %>%
+  ggplot2::ggplot(ggplot2::aes(PC1, PC2)) +
+  # ggplot2::geom_point(size = 2)
+  ggplot2::geom_point(
+    aes(
+      color = !!sym(factor1),
+      fill = !!sym(factor1),
+      # shape = !!sym(factor2)
+    ),
+    size = 2,
+    # shape = 21,
+    # color = "black",
+  ) +
+  ggplot2::xlab(paste0("PC1: ", percent_var[1], "% variance")) +
+  ggplot2::ylab(paste0("PC2: ", percent_var[2], "% variance")) +
+  gg_theme() +
+  ggplot2::theme(legend.position = "top") +
+  ggplot2::scale_shape_manual(values = c(21:25)) +
+  # ggplot2::scale_color_manual(values = viridis::viridis(3 + 1)) +
+  # ggplot2::scale_fill_manual(values = viridis::viridis(3 + 1)) +
+  ggplot2::scale_color_manual(values = palette_groups) +
+  ggplot2::scale_fill_manual(values = palette_groups) +
+  ggforce::geom_mark_ellipse(
+    aes(fill = !!sym(factor1), 
+        # group = interaction(!!sym(factor1), !!sym(factor2)),  # separate ellipses when having 2 factors design
+        color = !!sym(factor1)),
+    expand = unit(1, "mm"),
+    size = 0,
+    tol = 0.001
+  ) +
+  scale_x_continuous(expand = c(0.2, 0.2)) +
+  scale_y_continuous(expand = c(0.2, 0.2)) +
+  ggtitle("**Principal component analysis**")
+pca_plot + geom_text_repel(aes(label = name),
+    size = 3 / ggplot2:::.pt,
+    nudge_x = 1,
+    nudge_y = -1,
+    min.segment.length = 0,
+    #force = 3,
+    #box.padding = unit(0.1, "lines"),
+    segment.size=0.25,
+    segment.colour = "black"
+  )
+
+```
+
+Save plot
+```{r}
+filename <- "PCA_plot_vsd_ellipse"
+for (file_format in file_formats) {
+  ggsave_fixed(
+    paste0(
+      "../03.figures/",
+      filename_prefix,
+      filename, ".",
+      file_format
+    ),
+    units = "mm",
+    plot_width = 30,
+    plot_height = 30,
+    width = 50,
+    height = 50
+  )
+}
+```
+
+
+```{r}
+pca <- prcomp(t(assay(vsd)[top_var_genes, ]))
+
+# 1. Make a mapping table with unique rownames
+gene_symbol <- annotation %>%
+  filter(ensembl_gene_id %in% rownames(pca$rotation)) %>%
+  mutate(symbol = if_else(
+    is.na(!!sym(symbol)) | !!sym(symbol) == "", ensembl_gene_id, !!sym(symbol)
+  )) %>%
+  # Make labels unique (e.g., "Actb", "Actb_1", "Actb_2")
+  mutate(symbol = make.unique(symbol)) %>%
+  dplyr::select(ensembl_gene_id, symbol)
+
+# 2. Apply the new labels safely
+new_labels <- gene_symbol$symbol
+names(new_labels) <- gene_symbol$ensembl_gene_id
+
+# 3. Replace rownames
+rownames(pca$rotation) <- new_labels[rownames(pca$rotation)]
+```
+
+Top 10 genes contributing most to PC1
+```{r}
+fviz_contrib(pca, choice = "var", axes = 1, top = 10) +
+  gg_theme() +
+  theme(axis.text.x = ggtext::element_markdown(angle = 45, hjust = 1)) +
+  xlab("")
+```
+
+
+
+# Sample-to-sample distances
+```{r}
+vsd <- vst(dds.filter, blind = TRUE)
+sampleDists <- dist(t(assay(vsd)))
+sampleDistMatrix <- as.matrix(sampleDists)
+rownames(sampleDistMatrix) <- paste(vsd$Group, 
+                                    vsd$sample, sep = " - ")
+colnames(sampleDistMatrix) <- NULL
+heatmap <- pheatmap::pheatmap(sampleDistMatrix,
+  clustering_distance_rows = sampleDists,
+  clustering_distance_cols = sampleDists,
+  show_rownames = T, show_colnames = T,
+  cellwidth = 6,
+  cellheight = 6,
+  treeheight_row = 10,
+  treeheight_col = 10,
+  fontsize = 6,
+  border_color = NA,
+  col = colorRampPalette(rev(brewer.pal(9, "Blues")))(255)
+)
+```
+
+```{r}
+# Save plot
+filename <- "sample_distances"
+for (file_format in file_formats) {
+  ggsave(
+    plot = heatmap,
+    paste0(
+      "../03.figures/",
+      filename_prefix,
+      filename, ".",
+      file_format
+    ),
+    units = "mm",
+    dpi = 300,
+    width = 7 * length(metadata$sample),
+    height = 4 * length(metadata$sample)
+  )
+}
+```
+
+# R session info
+```{r}
+utils:::print.sessionInfo(sessionInfo()[-8])
+```
+
+# References
+
+- Love MI, Huber W, Anders S. 2014. Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2. Genome Biol 15:550. <a href="https://doi.org/10.1186/s13059-014-0550-8" target="_blank" rel="noopener">Link</a>
+
+<a href="https://bioconductor.org/help/course-materials/2022/CSAMA/lab/2-tuesday/lab-03-rnaseq/rnaseqGene_CSAMA2022.html" target="_blank" rel="noopener">RNA-seq workflow: gene-level exploratory analysis and differential expression</a>
+
+<a href="https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html" target="_blank" rel="noopener">Analyzing RNA-seq data with DESeq2</a>
+
+

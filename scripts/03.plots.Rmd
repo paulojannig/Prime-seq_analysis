@@ -1,0 +1,776 @@
+---
+title: "DESeq2 Plots"
+subtitle: "Prime-seq analysis"
+author: "Data analysis: Paulo Jannig | Karolinska Institutet"
+date: "`r paste('Last update:', format(Sys.time(), '%B %d, %Y'))`"
+output: 
+  html_document:
+    toc: true
+    toc_float: 
+      collapsed: false
+    toc_depth: 3
+    number_sections: true
+    theme: spacelab
+    highlight: default
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+```{r}
+print(setwd(dirname(rstudioapi::getSourceEditorContext()$path)))
+```
+
+
+```{r}
+# define variables ==========================================
+filename_prefix <- "" # leave empty if not necessary
+species <- "mouse" # mouse, human, pig, rat
+ensembl_version <- 115 # define ensembl release version
+
+file_formats <- list(
+  # "png",
+  "pdf"
+)
+
+# load libraries
+required_Packages_Install <- c( 
+  "tidyverse",
+  "pheatmap",
+  "ggtext",
+  "RColorBrewer",
+  "scico",
+  "writexl",
+  "ggrepel",
+  "ggvenn",
+  "scales"
+)
+
+
+for (Package in required_Packages_Install) {
+  if (!require(Package, character.only = TRUE)) {
+    BiocManager::install(Package, dependencies = TRUE)
+  }
+  library(Package, character.only = TRUE)
+}
+
+# source custom functions
+source("load_functions.R") # source custom functions
+```
+
+# Import data
+
+## Normalized counts
+```{r}
+normalized_counts <- readRDS(paste0(
+  "../02.results/deseq2/",
+  filename_prefix,
+  "deseq2_normalized_counts.Rds"))
+```
+
+## Metadata
+```{r}
+metadata <- readRDS(paste0(
+  "../01.metadata/", 
+  filename_prefix, 
+  "metadata.Rds"))
+colnames(metadata)
+metadata$sample
+unique(metadata$Group)
+```
+## Contrasts
+```{r}
+group <- "STZ"
+group_ref <- "Control"
+
+
+contrast1 <- paste0(group,"_vs_",group_ref)
+contrast1
+```
+
+```{r}
+contrast1.df <- readRDS(paste0("../02.results/deseq2/",
+                               filename_prefix,
+                               "deseq2_",
+                               contrast1,"_lfcShrink.RDS"))
+
+contrasts_list <- list(
+  contrast1.df
+  #contrast2.df
+)
+
+# Assign names to the list elements
+names(contrasts_list) <- c(contrast1)
+```
+
+```{r}
+contrast1.df.sig <- contrast1.df %>% filter(padj<0.05)
+
+```
+
+## Plots
+
+
+
+
+```{r}
+names(contrasts_list)
+```
+### MA plots
+define variables
+```{r}
+size_sig <- 0.5 # point size for the significant genes
+size_ns <- 0.2 # point size for the non-significant genes
+
+ylim_up <- 2 # upper limit for the y axis
+ylim_down <- -2  # lower limit for the y-axis
+
+# scico(10, palette = "navia")
+# "#021326" "#06345E" "#14578A" "#27728E" "#388284" "#4A9279" "#65AB6C" "#98CB6F" "#D7E4A7" "#FCF3D8"
+color_ns <- "#878787"      # color for non-significant values
+color_low = "#67001F"      # color for p=0.00
+color_high = "#4393C3"     # color for p=0.05
+
+color_up <- "#B2182B"      # color for increased genes
+color_down <- "#2166AC"    # color for decreased genes
+
+significance_threshold <- 0.05
+log2FC_threshold <- 0 # absolute value
+
+```
+
+#### All contrasts
+
+to generate MA plots for all contrasts
+```{r}
+for (i in seq_along(contrasts_list)) {
+group <- names(contrasts_list)[i] %>% str_extract(".*(?=_vs_)")
+group_ref <- names(contrasts_list)[i] %>% str_extract("(?<=_vs_).*")
+data <- contrasts_list[[i]]
+
+plot_title <- paste0("**", group, " vs ", group_ref,"**")
+
+ma <- ggplot(
+  data %>% mutate(padj = ifelse(is.na(padj), 1, padj)), 
+  aes(
+  x = log2(baseMean),
+  y = log2FoldChange
+)) +
+  ggplot2::geom_point(
+    data = filter(data, padj > significance_threshold | is.na(padj) | between(log2FoldChange, -log2FC_threshold, log2FC_threshold)),
+    colour = color_ns,
+    size = size_ns
+  ) +
+  ggplot2::geom_point(
+    data = filter(data, padj < significance_threshold & log2FoldChange > log2FC_threshold) %>%
+      arrange(-padj), colour = color_up, size = size_sig
+  ) +
+  ggplot2::geom_point(
+    data = filter(data, padj < significance_threshold & log2FoldChange < -log2FC_threshold) %>%
+      arrange(-padj), colour = color_down, size = size_sig
+  ) +
+  # ggplot2::geom_point(
+  #   data = filter(data, padj < significance_threshold) %>%
+  #     arrange(-padj), aes(colour = padj), size = size_sig
+  # ) +
+  xlab("log<sub>2</sub> mean expression") +
+  ylab("log<sub>2</sub> fold-change") +
+  geom_hline(yintercept = 0, linetype = "dotted") +
+  geom_hline(yintercept = log2FC_threshold, linetype = "dotted") +
+  geom_hline(yintercept = -log2FC_threshold, linetype = "dotted") +
+  ggtitle(plot_title) +
+  gg_theme() +
+  scale_color_gradient(
+    low = color_low, high = color_high,
+    limits = c(0, significance_threshold), oob = scales::squish
+  ) +
+  theme(legend.position = "right") +
+  # geom_label_repel(
+  #   data = filter(data, padj < significance_threshold & log2FoldChange > 0) %>% dplyr::slice(1:10),
+  #   aes(label = !!sym(symbol)),
+  #   size = 5 / ggplot2:::.pt,
+  #   force = 2,
+  #   label.padding = 0.1,
+  #   # face
+  #   direction = "both",
+  #   max.overlaps = 10,
+  #   #nudge_x = -2,
+  #   #nudge_y = 1,
+  #   min.segment.length = 0,
+  #   segment.size = 0.25
+  # )  +
+  # geom_label_repel(
+  #   data = filter(data, padj < significance_threshold & log2FoldChange < 0) %>% dplyr::slice(1:10),
+  #   aes(label = !!sym(symbol)),
+  #   size = 5 / ggplot2:::.pt,
+  #   force = 4,
+  #   label.padding = 0.1,
+  #   # face
+  #   direction = "both",
+  #   max.overlaps = 10,
+  #  # nudge_x = -2,
+  #   #nudge_y = -1,
+  #   min.segment.length = 0,
+  #   seed = 1234,
+  #   segment.size = 0.25
+  # ) +
+  coord_cartesian(ylim = c(ylim_down, ylim_up), expand = T) +
+  #geom_hline(yintercept = 1, linetype = "dotted") +
+  #geom_hline(yintercept = -1, linetype = "dotted") +
+  annotate("text",
+    x = max(log2(data$baseMean)), 
+    #y = max(data$log2FoldChange),
+    y = ylim_up,
+    label = paste0(
+      #group,": ",
+      "Increased: ",
+      nrow(filter(data, padj < significance_threshold & log2FoldChange > log2FC_threshold))
+    ),
+    hjust = 1, vjust = 1, size = 5 / ggplot2:::.pt
+  ) +
+  annotate("text",
+    x = max(log2(data$baseMean)),
+    #y = min(data$log2FoldChange),
+    y = ylim_down,
+    label = paste0(
+      #group_ref,
+      "Decreased: ",
+      nrow(filter(data, padj < significance_threshold & log2FoldChange < log2FC_threshold))
+    ),
+    hjust = 1, vjust = 0, size = 5 / ggplot2:::.pt
+  )
+ma
+
+# save plot
+filename <- paste0(group, "_vs_", group_ref)
+
+for (file_format in file_formats) {
+  ggsave_fixed(
+    paste0(
+      "../03.figures/",
+      filename_prefix,
+      "MA_plot_",
+      filename,".",
+      file_format
+    ),
+    units = "mm",
+    plot_width = 30,
+    plot_height = 30,
+    width = 60,
+    height = 50
+  )
+}
+}
+```
+
+
+for selected contrast:
+```{r}
+group <- names(contrasts_list)[1] %>% str_extract(".*(?=_vs_)")
+group_ref <- names(contrasts_list)[1] %>% str_extract("(?<=_vs_).*")
+data <- contrasts_list[[1]]
+
+plot_title <- paste0("**", group, " vs ", group_ref,"**")
+plot_title
+
+```
+
+
+```{r}
+ma <- ggplot(
+  data %>% mutate(padj = ifelse(is.na(padj), 1, padj)), 
+  aes(
+  x = log2(baseMean),
+  y = log2FoldChange
+)) +
+  ggplot2::geom_point(
+    data = filter(data, padj > significance_threshold | is.na(padj)),
+    colour = color_ns,
+    size = size_ns
+  ) +
+  ggplot2::geom_point(
+    data = filter(data, padj < significance_threshold & log2FoldChange > 0) %>%
+      arrange(-padj), colour = color_up, size = size_sig
+  ) +
+  ggplot2::geom_point(
+    data = filter(data, padj < significance_threshold & log2FoldChange < 0) %>%
+      arrange(-padj), colour = color_down, size = size_sig
+  ) +
+  # ggplot2::geom_point(
+  #   data = filter(data, padj < significance_threshold) %>%
+  #     arrange(-padj), aes(colour = padj), size = size_sig
+  # ) +
+  xlab("log<sub>2</sub> mean expression") +
+  ylab("log<sub>2</sub> fold-change") +
+  geom_hline(yintercept = 0, linetype = "dotted") +
+  ggtitle(plot_title) +
+  gg_theme() +
+  scale_color_gradient(
+    low = color_low, high = color_high,
+    limits = c(0, significance_threshold), oob = scales::squish
+  ) +
+  theme(legend.position = "right") +
+  # geom_label_repel(
+  #   data = filter(data, padj < significance_threshold & log2FoldChange > 0) %>% dplyr::slice(1:10),
+  #   aes(label = !!sym(symbol)),
+  #   size = 5 / ggplot2:::.pt,
+  #   force = 2,
+  #   label.padding = 0.1,
+  #   # face
+  #   direction = "both",
+  #   max.overlaps = 10,
+  #   #nudge_x = -2,
+  #   #nudge_y = 1,
+  #   min.segment.length = 0,
+  #   segment.size = 0.25
+  # )  +
+  # geom_label_repel(
+  #   data = filter(data, padj < significance_threshold & log2FoldChange < 0) %>% dplyr::slice(1:10),
+  #   aes(label = !!sym(symbol)),
+  #   size = 5 / ggplot2:::.pt,
+  #   force = 4,
+  #   label.padding = 0.1,
+  #   # face
+  #   direction = "both",
+  #   max.overlaps = 10,
+  #  # nudge_x = -2,
+  #   #nudge_y = -1,
+  #   min.segment.length = 0,
+  #   seed = 1234,
+  #   segment.size = 0.25
+  # ) +
+  coord_cartesian(ylim = c(ylim_down, ylim_up), expand = T) +
+  #geom_hline(yintercept = 1, linetype = "dotted") +
+  #geom_hline(yintercept = -1, linetype = "dotted") +
+  annotate("text",
+    x = max(log2(data$baseMean)), 
+    #y = max(data$log2FoldChange),
+    y = ylim_up,
+    label = paste0(
+      #group,": ",
+      "Increased: ",
+      nrow(filter(data, padj < significance_threshold & log2FoldChange > 0))
+    ),
+    hjust = 1, vjust = 1, size = 5 / ggplot2:::.pt
+  ) +
+  annotate("text",
+    x = max(log2(data$baseMean)),
+    #y = min(data$log2FoldChange),
+    y = ylim_down,
+    label = paste0(
+      #group_ref,
+      "Decreased: ",
+      nrow(filter(data, padj < significance_threshold & log2FoldChange < 0))
+    ),
+    hjust = 1, vjust = 0, size = 5 / ggplot2:::.pt
+  )
+ma
+```
+Save plot
+```{r}
+
+filename <- paste0(group, "_vs_", group_ref)
+for (file_format in file_formats) {
+  ggsave_fixed(
+    paste0(
+      "../03.figures/",
+      filename_prefix,
+      "MA_plot_",
+      filename, ".",
+      file_format
+    ),
+    units = "mm",
+    plot_width = 30,
+    plot_height = 30,
+    width = 60,
+    height = 50
+  )
+}
+```
+
+
+
+
+### Volcano Plots
+for selected contrast:
+```{r}
+group <- names(contrasts_list)[1] %>% str_extract(".*(?=_vs_)")
+group_ref <- names(contrasts_list)[1] %>% str_extract("(?<=_vs_).*")
+data <- contrasts_list[[1]]
+
+plot_title <- paste0("**", group, " vs ", group_ref,"**")
+plot_title
+
+```
+
+define variables
+```{r}
+size_sig <- 0.5 # point size for the significant genes
+size_ns <- 0.1 # point size for the non-significant genes
+
+xlim_up <- data %>% # upper limit for the x-axis
+  filter(!is.na(padj)) %>%
+  summarise(x = ceiling(max(abs(log2FoldChange)))) %>%
+  pull(x)
+
+xlim_down <- -xlim_up
+
+#xlim_up <- 1 # upper limit for the x-axis
+#xlim_down <- -1  # lower limit for the x-axis
+
+# scico(10, palette = "navia")
+# "#021326" "#06345E" "#14578A" "#27728E" "#388284" "#4A9279" "#65AB6C" "#98CB6F" "#D7E4A7" "#FCF3D8"
+color_ns <- "#878787"      # color for non-significant values
+color_low = "#67001F"      # color for p=0.00
+color_high = "#4393C3"     # color for p=0.05
+
+color_up <- "#B2182B"      # color for increased genes
+color_down <- "#2166AC"    # color for decreased genes
+
+significance_threshold <- 0.05
+log2FC_threshold <- 0 # absolute value
+
+```
+
+
+```{r}
+volcano <- ggplot(
+  data %>% mutate(padj = ifelse(is.na(padj), 1, padj)), 
+  aes(
+  x = log2FoldChange,
+  y = -log10(padj)
+)) +
+  ggplot2::geom_point(
+    data = filter(data, padj > significance_threshold | is.na(padj)),
+    colour = color_ns,
+    size = size_ns
+  ) +
+  ggplot2::geom_point(
+    data = filter(data, padj < significance_threshold & log2FoldChange > 0) %>%
+      arrange(-padj), colour = color_up, size = size_sig
+  ) +
+  ggplot2::geom_point(
+    data = filter(data, padj < significance_threshold & log2FoldChange < 0) %>%
+      arrange(-padj), colour = color_down, size = size_sig
+  ) +
+  # ggplot2::geom_point(
+  #   data = filter(data, padj < significance_threshold) %>%
+  #     arrange(-padj), aes(colour = padj), size = size_sig
+  # ) +
+  xlab("log<sub>2</sub> fold-change") +
+  ylab("-log<sub> 10</sub> adjusted p-value") +
+  ggtitle(plot_title) +
+  gg_theme() +
+  scale_color_gradient(
+    low = color_low, high = color_high,
+    limits = c(0, significance_threshold), oob = scales::squish
+  ) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dotted") +
+  #geom_hline(yintercept = -1, linetype = "dotted") +
+   theme(legend.position = "right") + 
+  coord_cartesian(xlim = c(xlim_down, xlim_up), expand = T) +
+  annotate("text",
+    x = xlim_up,
+    y = max(-log10(data$padj), na.rm = TRUE),
+    label = paste0(
+      #group,": ",
+      #"Increased: ",
+      nrow(filter(data, padj < significance_threshold & log2FoldChange > 0))
+    ),
+    hjust = 1, vjust = 1, size = 5 / ggplot2:::.pt
+  ) +
+  annotate("text",
+    x = xlim_down,
+    #y = 4,
+    y = max(-log10(data$padj), na.rm = TRUE),
+    label = paste0(
+      #group_ref,
+      #"Decreased: ",
+      nrow(filter(data, padj < significance_threshold & log2FoldChange < 0))
+    ),
+    hjust = 0, vjust = 1, size = 5 / ggplot2:::.pt
+  )
+volcano
+```
+Save plot
+```{r}
+filename <- paste0(group, "_vs_", group_ref)
+for (file_format in file_formats) {
+  ggsave_fixed(
+    paste0(
+      "../03.figures/",
+      filename_prefix,
+      "Volcano_plot_",
+      filename, ".",
+      file_format
+    ),
+    units = "mm",
+    plot_width = 30,
+    plot_height = 30,
+    width = 60,
+    height = 50
+  )
+}
+```
+### Heatmaps
+```{r}
+colnames(metadata)
+unique(metadata$Group)
+```
+
+define color palette
+```{r}
+# my_palette <- c(
+  # "" = "#666666",
+  # "" = "#1B9E77",
+  # "" = "#D95F02",
+  # "" = "#7570B3"
+# )
+
+# Define colors
+my_palette_heatmap <- list(
+  Group = c(
+    Control = "#1B9E77",
+    STZ = "#D95F02"
+  )
+)
+
+```
+
+#### all DEGs
+for DEGs with padj < 0.05
+```{r}
+levels(metadata$Group)
+colnames(metadata)
+```
+
+```{r}
+# generate heatmap metadata (annotation_col)
+heatmap_metadata <- metadata %>%
+  arrange(Group) %>%
+  dplyr::select(c(sample, Group)) %>%
+  column_to_rownames("sample")
+
+# retrieve genes of interest
+#select DEGs for all contrasts (padj < 0.05)
+heatmap_genes <- c()
+for (contrast in contrasts_list) {
+  genes <- contrast %>%
+    filter(padj < 0.05) %>%
+    #pull(symbol)
+    pull("ensembl_gene_id")
+  heatmap_genes <- union(heatmap_genes, genes)
+  remove(genes, contrast)
+}
+
+# generate heatmap matrix
+heatmap_counts <- normalized_counts %>%
+  #dplyr::filter(!!sym(symbol) %in% heatmap_genes)
+  dplyr::filter(ensembl_gene_id %in% heatmap_genes)
+
+heatmap_counts <- heatmap_counts %>%
+  dplyr::arrange(desc(matrixStats::rowVars(as.matrix(
+    heatmap_counts %>%
+      dplyr::select(dplyr::matches(rownames(heatmap_metadata)))
+  )))) %>%
+  #column_to_rownames(symbol) %>%
+  column_to_rownames("ensembl_gene_id") %>%
+  dplyr::select(dplyr::matches(rownames(heatmap_metadata)))
+```
+
+Without gene labels
+```{r}
+heatmap <- pheatmap::pheatmap(heatmap_counts,
+  cluster_rows = T,
+  cluster_cols = F,
+  scale = "row",
+  clustering_distance_rows = "euclidean",
+  #cutree_rows = 4,
+  show_rownames = F, show_colnames = F,
+  cellwidth = 3,
+  #cellheight = 4,
+  treeheight_row = 5,
+  treeheight_col = 15,
+  fontsize = 6,
+  fontsize_row = 4,
+  fontsize_col = 5,
+  border_color = NA,
+  gaps_col = c(5),
+  annotation_colors = my_palette_heatmap,
+  annotation_col = heatmap_metadata,
+  #annotation_row = heatmap_metadata,
+  color = colorRampPalette(
+    rev(RColorBrewer::brewer.pal(11, "RdBu"))
+  )(256)
+)
+```
+
+Save plot
+```{r}
+filename <- "heatmap_significant_zcore_clustered"
+for (file_format in file_formats) {
+  ggsave(
+    plot = heatmap,
+    paste0(
+      "../03.figures/",
+      filename_prefix,
+      filename, ".",
+      file_format
+    ),
+    units = "mm",
+    dpi = 300,
+    width = 100,
+    height = 70
+  )
+}
+```
+
+```{r echo=FALSE}
+cat("Saved file :", paste0(
+  "../03.figures/",
+  filename_prefix, filename,
+  ".pdf"
+))
+```
+
+
+#### Clusters
+Get clusters from heatmap
+```{r}
+#Cut the row (gene) dendrogram at a Euclidean distance dis-similarity of 6
+cluster_genes <- as.data.frame(sort(cutree(heatmap$tree_row, k=2)))
+names(cluster_genes) <- c("cluster")
+cluster_genes$enseml_gene_id <- rownames(cluster_genes)
+unique(cluster_genes[,1])
+
+cluster_genes <- cluster_genes %>%
+  mutate(cluster = paste0("Cluster_", cluster))
+
+cluster_summary <- cluster_genes %>%
+  group_by(cluster) %>%
+  summarize(genes = n())
+cluster_summary
+
+```
+
+Save list of genes per cluster
+```{r}
+
+filename <- "cluster_genes"
+write.csv(cluster_genes, paste0(
+  "../02.results/",
+  filename_prefix,
+  filename,
+  ".csv"
+),
+row.names = F, quote = F
+)
+
+saveRDS(cluster_genes, paste0(
+  "../02.results/",
+  filename_prefix,
+  filename,
+  ".Rds"
+))
+```
+
+
+```{r echo=FALSE}
+cat("Saved file :", paste0(
+  "../02.results/",
+  filename_prefix,
+  filename,
+  ".csv"
+))
+```
+
+```{r}
+
+# # View a single RColorBrewer palette by specifying its name
+# display.brewer.pal(n = 12, name = 'Paired') 
+# # Hexadecimal color specification 
+# brewer.pal(n = 12, name = "Paired")
+ # [1] "#A6CEE3" "#1F78B4" "#B2DF8A" "#33A02C" "#FB9A99" "#E31A1C" "#FDBF6F" "#FF7F00" "#CAB2D6" "#6A3D9A"
+# [11] "#FFFF99" "#B15928"
+
+my_palette_heatmap <- list(
+  Group = c(
+    Control = "#1B9E77",
+    STZ = "#D95F02"
+  ),
+  cluster = c(
+    Cluster_1 = "#A6CEE3",
+    Cluster_2 = "#B2DF8A"
+  )
+)
+```
+
+
+Without gene labels
+```{r}
+heatmap <- pheatmap::pheatmap(heatmap_counts,
+  cluster_rows = T,
+  cluster_cols = F,
+  scale = "row",
+  clustering_distance_rows = "euclidean",
+  cutree_rows = 2,
+  show_rownames = F, show_colnames = F,
+  cellwidth = 3,
+  #cellheight = 4,
+  treeheight_row = 5,
+  treeheight_col = 15,
+  fontsize = 6,
+  fontsize_row = 4,
+  fontsize_col = 5,
+  border_color = NA,
+  gaps_col = c(5),
+  annotation_colors = my_palette_heatmap,
+  annotation_col = heatmap_metadata,
+  annotation_row = cluster_genes[1],
+  color = colorRampPalette(
+    rev(RColorBrewer::brewer.pal(11, "RdBu"))
+  )(256)
+)
+```
+
+Save plot
+```{r}
+filename <- "heatmap_significant_zcore_clustered_rowlabel"
+for (file_format in file_formats) {
+  ggsave(
+    plot = heatmap,
+    paste0(
+      "../03.figures/",
+      filename_prefix,
+      filename, ".",
+      file_format
+    ),
+    units = "mm",
+    dpi = 300,
+    width = 100,
+    height = 70
+  )
+}
+```
+
+```{r echo=FALSE}
+cat("Saved file :", paste0(
+  "../03.figures/",
+  filename_prefix, filename,
+  ".pdf"
+))
+```
+# R session info
+```{r}
+utils:::print.sessionInfo(sessionInfo()[-8])
+```
+
+

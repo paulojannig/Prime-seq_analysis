@@ -1,0 +1,266 @@
+---
+title: "DESeq2 contrasts - gene level"
+subtitle: "Prime-seq analysis"
+author: "Data analysis: Paulo Jannig | Karolinska Institutet"
+date: "`r paste('Last update:', format(Sys.time(), '%B %d, %Y'))`"
+output: 
+  html_document:
+    toc: true
+    toc_float: 
+      collapsed: false
+    toc_depth: 3
+    number_sections: true
+    theme: spacelab
+    highlight: default
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+```{r}
+print(setwd(dirname(rstudioapi::getSourceEditorContext()$path)))
+```
+
+```{r}
+# define variables ==========================================
+filename_prefix <- "" # leave empty if not necessary
+species <- "mouse" # mouse, human, pig, rat
+ensembl_version <- 115 # define ensembl release version
+
+file_formats <- list(
+  #"png",
+  "pdf"
+)
+
+# load libraries
+required_Packages_Install <- c(
+  "tidyverse",
+  "DESeq2",
+  "DT",
+  "RColorBrewer",
+  "ggrepel",
+  "ggtext",
+  "biomaRt",
+  "scales",
+  "writexl",
+  "limma"
+)
+
+for (Package in required_Packages_Install) {
+  if (!require(Package, character.only = TRUE)) {
+    BiocManager::install(Package, dependencies = TRUE)
+  }
+  library(Package, character.only = TRUE)
+}
+
+# source custom functions
+source("load_functions.R") # source custom functions
+```
+
+
+# Import data
+
+## Import dds
+```{r}
+dds <- readRDS(paste0(
+  "../02.results/deseq2/",
+  filename_prefix,
+  "dds.Rds"
+))
+```
+
+## Import biomaRt annotation
+```{r}
+annotation <- readRDS(paste0(
+  "../02.results/deseq2/",
+  filename_prefix,
+  "biomart_annotation.Rds"
+))
+colnames(annotation)
+```
+
+## Metadata
+
+```{r}
+metadata <- readRDS(paste0(
+  "../01.metadata/", 
+  filename_prefix, 
+  "metadata.Rds"))
+colnames(metadata)
+metadata$sample
+unique(metadata$Group)
+```
+
+# DEseq2 Contrast workflow
+
+## With LFC Shrink
+
+### Contrast 1
+
+List coefficients
+```{r}
+design(dds)
+resultsNames(dds)
+levels(dds$Group)
+```
+
+Group_STZ_vs_Control
+```{r}
+group <- "STZ"
+group_ref <- "Control"
+
+# contrast="Group_STZ_vs_Control"
+
+res <- lfcShrink(dds,
+  contrast = c(
+    "Group",
+    group, group_ref
+  ), type = "ashr"
+)
+
+# res <- lfcShrink(dds,
+#                  coef=contrast,
+#                  type = "normal")
+
+#
+# res <- results(dds,
+#                contrast = list("GroupHIHGAS",
+#                                "GroupLILGAS"))
+# res <- results(dds,
+#                contrast = c("Group", group, group_ref))
+
+summary(res, alpha = 0.05)
+
+# Join with annotation and relocate relevant columns
+df <- as.data.frame(res) %>%
+  rownames_to_column("ensembl_gene_id") %>%
+  dplyr::left_join(annotation, by = "ensembl_gene_id") %>%
+  relocate(symbol, gene_biotype, chromosome_name, gene_biotype, .after = ensembl_gene_id) %>%
+  arrange(padj)
+
+# Replace empty gene symbols by ensembl_gene_id
+df[, symbol] <- ifelse(df[, symbol] == "" | is.na(df[, symbol]),
+  df$ensembl_gene_id, df[, symbol]
+)
+
+# Ensure ensembl_gene_id isn't blank by setting it to symbol where needed
+df$ensembl_gene_id <- ifelse(df$ensembl_gene_id == "",
+  df[, symbol], df$ensembl_gene_id
+)
+
+# Handle NA values for ensembl_gene_id by replacing them with symbol
+na_symbol <- is.na(df$ensembl_gene_id)
+df[na_symbol, "ensembl_gene_id"] <- df[na_symbol, symbol]
+
+res.sig <- filter(
+  as.data.frame(df),
+  padj < 0.05
+)
+nrow(res.sig)
+
+sprintf("Total sig: %s", nrow(res.sig))
+sprintf(
+  "UP: %s; DOWN: %s",
+  nrow(res.sig %>% filter(log2FoldChange > 0)),
+  nrow(res.sig %>% filter(log2FoldChange < 0))
+)
+```
+Export results
+```{r}
+filename <- paste0("deseq2_", group, "_vs_", group_ref, "_lfcShrink")
+# filename <- paste0("deseq2_", contrast, "_lfcShrink")
+
+write.csv(df, paste0(
+  "../02.results/deseq2/",
+  filename_prefix,
+  filename,
+  ".csv"
+),
+row.names = F, quote = F
+)
+
+saveRDS(df, paste0(
+  "../02.results/deseq2/",
+  filename_prefix,
+  filename,
+  ".RDS"
+))
+
+write_xlsx(df, paste0(
+  "../04.supplements/",
+  filename_prefix,
+  filename,
+  ".xlsx"
+))
+```
+
+#### Results table
+```{r}
+filename <- paste0("deseq2_", group, "_vs_", group_ref, "_lfcShrink")
+# filename <- paste0("deseq2_", contrast, "_lfcShrink")
+
+df %>%
+  filter(padj < 0.05) %>%
+  DT::datatable(
+    extensions = "Buttons",
+    options = list(
+      scrollX = TRUE,
+      pageLength = 50,
+      dom = "Blfrtip",
+      buttons = list(
+        list(extend = "csv", filename = paste0(filename_prefix, filename)),
+        list(extend = "excel", filename = paste0(filename_prefix, filename))
+      )
+    )
+  )
+```
+
+# Gene plots
+
+```{r}
+gene_symbol <- "Cyp3a44"
+
+ggplot(
+  plotCounts(dds,
+    gene = annotation %>%
+      filter(!!sym(symbol) == gene_symbol) %>%
+      pull("ensembl_gene_id"),
+    # intgroup = c("Group", "Diet"),
+    intgroup = c("Group"),
+    returnData = TRUE
+  ) %>% rownames_to_column("Sample"),
+  aes(x = Group, y = count)
+  ) +
+  #facet_wrap(~Diet) + 
+  geom_point(shape = 1) +
+  ggtitle(gene_symbol) +
+  gg_theme() +
+  # gg_theme() +
+  labs(x = "", y = "Normalized Counts") +
+  geom_text_repel(aes(label = Sample),
+    size = 7 / ggplot2:::.pt,
+    min.segment.length = 0,
+    segment.colour = "black"
+  )
+```
+
+
+# R session info
+```{r}
+utils:::print.sessionInfo(sessionInfo()[-8])
+```
+
+# References
+
+- Love MI, Huber W, Anders S. 2014. Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2. Genome Biol 15:550. <a href="https://doi.org/10.1186/s13059-014-0550-8" target="_blank" rel="noopener">Link</a>
+
+<a href="https://bioconductor.org/help/course-materials/2022/CSAMA/lab/2-tuesday/lab-03-rnaseq/rnaseqGene_CSAMA2022.html" target="_blank" rel="noopener">RNA-seq workflow: gene-level exploratory analysis and differential expression</a>
+
+<a href="https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html" target="_blank" rel="noopener">Analyzing RNA-seq data with DESeq2</a>
