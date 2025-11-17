@@ -1,4 +1,4 @@
-# Prime-seq Analysis Pipeline (DNBSEQ-G400) – Deng Lab
+# Prime-seq Analysis Pipeline – Deng Lab
 
 <br>**Paulo Jannig** - [paulo.jannig@ki.se](mailto:paulo.jannig@ki.se) | [paulo.jannig@su.se](mailto:paulo.jannig@su.se) | [GitHub account](https://github.com/paulojannig)
 <br>**Hong Jiang** - [hong.jiang@ki.se](mailto:hong.jiang@ki.se) | [GitHub account](https://github.com/brainfo)
