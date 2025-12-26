@@ -26,13 +26,10 @@ display.brewer.all(type="qual", colorblindFriendly = TRUE)
 
 palette_pca <- brewer.pal(n = 12, name = "Paired")
 
-
 display.brewer.pal(n = 11, name = 'RdBu')
 brewer.pal(n = 11, name = "RdBu")
 
 ```
-
-
 
 # [Scientific colour maps](https://www.fabiocrameri.ch/colourmaps/)
 [User guide](https://www.fabiocrameri.ch/ws/media-library/d799f7fecb4e439998e43597cd397a6c/readme_scientificcolourmaps.pdf)
@@ -71,7 +68,6 @@ scico(n = 3, palette = "oslo", direction = 1)
 
 palette_scico <- viridis::viridis(3)
 palette_scico <- scico(4, palette = "davos")
-
 
 palette_scico <- scico(3, palette = "nuuk", direction = -1)
 
