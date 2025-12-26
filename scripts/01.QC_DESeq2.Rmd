@@ -36,7 +36,8 @@ filename_prefix <- "" # leave empty if not necessary
 species <- "mouse" # mouse, human, pig, rat
 ensembl_version <- 115 # define ensembl release version. We've been using:
                         # 102 for human
-                        # 107 for mouse
+                        # 107 for mouse GRCm38
+                        # 115 for mouse GRCm39
             
 file_formats <- list(
   #"png",

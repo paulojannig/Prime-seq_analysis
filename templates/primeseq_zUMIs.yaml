@@ -16,12 +16,12 @@ project: EXPERIMENT
 #you can specify between 1 and 4 input files
 sequence_files:
   file1:
-    name: /mnt/run/USER/EXPERIMENT/Data/02.TrimmedData/FLOWCELL_BARCODE_merge_cutadapt_trimG_1.fastq.gz
+    name: /mnt/run/USER/EXPERIMENT/Data/02.TrimmedData/EXPERIMENT_merge_cutadapt_trimG_1.fastq.gz
     base_definition:
       - BC(1-12)
       - UMI(13-28)
   file2:
-    name: /mnt/run/USER/EXPERIMENT/Data/02.TrimmedData/FLOWCELL_BARCODE_merge_cutadapt_trimG_2.fastq.gz
+    name: /mnt/run/USER/EXPERIMENT/Data/02.TrimmedData/EXPERIMENT_merge_cutadapt_trimG_2.fastq.gz
     base_definition:
       - cDNA(15-100) #or 15-150
 
@@ -31,6 +31,7 @@ reference:
   #STAR INDEX
   ##For human:
   #STAR_index: /mnt/run/shared/genomes/human/Gencode/GRCh38.13/release_42/STAR_index_85bp #path to STAR genome index
+  #STAR_index: /mnt/run/shared/genomes/human/ensembl/GRCh38.102/STAR_index_85 #path to STAR genome index
   ##For mouse:
   STAR_index: /mnt/run/shared/genomes/mouse/ensembl/GRCm39/STAR_index_85 #path to STAR genome index
   #STAR_index: /mnt/run/shared/genomes/mouse/ensembl/GRCm39/STAR_index_135 #path to STAR genome index
@@ -38,6 +39,7 @@ reference:
   #Annotation
   ##For human:
   #GTF_file: /mnt/run/shared/genomes/human/Gencode/GRCh38.13/release_42/gencode.v42.annotation.gtf #path to gene annotation file in GTF format
+  #GTF_file: /mnt/run/shared/genomes/human/ensembl/GRCh38.102/Homo_sapiens.GRCh38.102.gtf #path to gene annotation file 
   #For mouse:
   GTF_file: /mnt/run/shared/genomes/mouse/ensembl/GRCm39/Mus_musculus.GRCm39.115.chr.gtf #path to gene annotation file in GTF format
   

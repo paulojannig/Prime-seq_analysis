@@ -53,20 +53,21 @@ mkdir -p \
     Data/01.RawData/merged/ \
     Data/02.TrimmedData
 
-#cp ~/github_resources/Prime-seq_analysis/templates/primeseq_zUMIs.yaml ~/github_resources/Prime-seq_analysis/primeseq_zUMIs_${EXPERIMENT}.yaml
-#cp ~/github_resources/Prime-seq_analysis/templates/Template_Primeseq_barcodes_samples.txt ~/github_resources/Prime-seq_analysis/Primeseq_barcodes_samples.txt
+cp ~/github_resources/Prime-seq_analysis/templates/primeseq_zUMIs.yaml ~/github_resources/Prime-seq_analysis/primeseq_zUMIs.yaml
+cp ~/github_resources/Prime-seq_analysis/templates/Template_Primeseq_barcodes_samples.txt ~/github_resources/Prime-seq_analysis/Primeseq_barcodes_samples.txt
 
 cp -r ~/github_resources/Prime-seq_analysis/scripts/*.Rmd ${PATH_EXPERIMENT}/scripts/
 cp -r ~/github_resources/Prime-seq_analysis/scripts/*.R ${PATH_EXPERIMENT}/scripts/
-#cp -r ~/github_resources/Prime-seq_analysis/templates/sampleInfo.xlsx ${PATH_EXPERIMENT}/01.metadata/
+cp -r ~/github_resources/Prime-seq_analysis/templates/sampleInfo.xlsx ${PATH_EXPERIMENT}/01.metadata/
 cp -r ~/github_resources/Prime-seq_analysis/miscellaneous/pathways_names_replacements.txt ${PATH_EXPERIMENT}/miscellaneous/
+cp -r ~/github_resources/Prime-seq_analysis/miscellaneous/*.md ${PATH_EXPERIMENT}/miscellaneous/
 
 ## Copy files
 echo " ==================== Copying Fastq files and reports ==================== " `date`
 if [ $PLATFORM = "MGI" ]
 then
     echo " ==================== MGI data ==================== "
-    cp ${PATH_RAW_DATA}/${FLOWCELL}/L0*/*${PRIMESEQ_INDEX}*.fq.gz ${PATH_EXPERIMENT}/Data/01.RawData/multiple_lanes/${FLOWCELL}_${PRIMESEQ_INDEX}
+    cp ${PATH_RAW_DATA}/${FLOWCELL}/L0*/*${PRIMESEQ_INDEX}*.fq.gz ${PATH_EXPERIMENT}/Data/01.RawData/multiple_lanes/${EXPERIMENT}
     cp ${PATH_RAW_DATA}/${FLOWCELL}/L0*/*${PRIMESEQ_INDEX}*.fq.fqStat.txt ${PATH_EXPERIMENT}/Data/00.reports/
     cp ${PATH_RAW_DATA}/${FLOWCELL}/L0*/*${PRIMESEQ_INDEX}*.report.html ${PATH_EXPERIMENT}/Data/00.reports/
     printf "\n"
