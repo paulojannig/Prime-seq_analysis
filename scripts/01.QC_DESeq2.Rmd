@@ -230,6 +230,78 @@ counts.df <- frds_inex.sum %>%
   rename_all(~metadata$sample)
 ```
 
+## Number of UMIs per sample
+
+```{r}
+umipersample <- colSums(counts$umicount$inex$all) %>% as.data.frame() %>%
+  rownames_to_column("barcode") %>%
+  dplyr::rename("UMI" = ".")
+```
+
+```{r}
+umipersample <- left_join(metadata, umipersample, by = "barcode") %>%
+  mutate(sample = fct_reorder(sample, UMI, .desc = TRUE))
+```
+
+```{r}
+y_max <- max(umipersample$UMI)
+y_min <- min(umipersample$UMI)
+y_lim <- y_max * 1.1
+sample_number <- length(umipersample$sample)
+
+# Create the bar plot
+ggplot(umipersample, aes(x = sample, y = UMI, fill = Group)) +
+  geom_bar(stat = "identity") +
+  geom_hline(yintercept = y_max, linetype = "dashed", size = 0.25) +
+  geom_hline(yintercept = y_min, linetype = "dashed", size = 0.25) +
+  annotate("text", x = 1, y = y_max, label = paste("Max:", scales::comma(y_max)),
+           vjust = -0.3, hjust = 0, size = 6 / ggplot2:::.pt) +
+  annotate("text", x = sample_number, y = y_min, label = paste("Min:", scales::comma(y_min)), 
+           vjust = 1.5, hjust = 1, size = 6 / ggplot2:::.pt) +
+  labs(x = "Sample", y = "UMIs", title = "UMIs per Sample by Group") +
+  ggplot2::scale_fill_manual(values = palette_groups) +
+  gg_theme() + 
+  theme(
+    axis.text.x = ggtext::element_markdown(angle = 45, hjust = 1),
+    legend.position = "top"
+  )  + 
+  coord_cartesian(xlim = c(0, sample_number+1), ylim = c(0, y_lim), expand = FALSE)
+```
+
+Save plot
+```{r}
+filename <- "QC_UMIs_per_sample"
+
+for (file_format in file_formats) {
+  ggsave_fixed(
+    plot = ggplot2::last_plot() + gg_theme() + 
+      theme(axis.text.x = ggtext::element_markdown(angle = 45, hjust = 1),
+            legend.position = "top"
+            ), 
+    paste0(
+      "../03.figures/",
+      filename_prefix,
+      filename, ".",
+      file_format
+    ),
+    units = "mm",
+    plot_width = sample_number*3,
+    plot_height = 25,
+    width = sample_number*5,
+    height = 60
+  )
+}
+```
+
+If needed, use this to remove samples
+```{r}
+# metadata <- metadata %>%
+#  dplyr::filter(Sample != "")
+#  filter(!(sample %in% c("",
+#                         "",
+#                         "")))
+
+```
 Check if there are duplicated ensembl_gene_id
 ```{r}
 duplicated_rows <- data.frame(rownames(counts.df)[duplicated(str_remove(rownames(counts.df), "\\..*"))])
