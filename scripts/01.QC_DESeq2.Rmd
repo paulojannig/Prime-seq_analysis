@@ -385,7 +385,7 @@ annotation <- biomaRt::getBM(
   ),
   mart = useEnsembl(
     biomart = "ensembl", # Use the "ensembl" BioMart database
-    mirror = "useast",
+    mirror = "useast", # "useast", "uswest","asia", "www"
     dataset = dataset, # Specify the dataset
     version = ensembl_version # Specify the Ensembl version
   )
@@ -569,7 +569,8 @@ Choose one of the options below:
 cutoff <- 1 # set cutoff
 
 ### Calculte smallestGroupSize
-smallestGroupSize <- metadata %>%
+smallestGroupSize <- dds.filter.sample@colData %>%
+  as.data.frame() %>%
   dplyr::group_by(Group) %>%
   #dplyr::group_by(group, genotype) %>%
   dplyr::summarise(samples = dplyr::n()) %>%
