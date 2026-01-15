@@ -161,18 +161,16 @@ df$ensembl_gene_id <- ifelse(df$ensembl_gene_id == "",
 na_symbol <- is.na(df$ensembl_gene_id)
 df[na_symbol, "ensembl_gene_id"] <- df[na_symbol, symbol]
 
-res.sig <- filter(
-  as.data.frame(df),
-  padj < 0.05
-)
-nrow(res.sig)
+# Without lfcShrink to get Wald statistic
+wald <- results(dds,
+               contrast = c("Group", group, group_ref)) %>%
+  as.data.frame() %>%
+  rownames_to_column("ensembl_gene_id") %>%
+  select(ensembl_gene_id, stat)
 
-sprintf("Total sig: %s", nrow(res.sig))
-sprintf(
-  "UP: %s; DOWN: %s",
-  nrow(res.sig %>% filter(log2FoldChange > 0)),
-  nrow(res.sig %>% filter(log2FoldChange < 0))
-)
+df <- left_join(df, wald, by = "ensembl_gene_id") %>%
+  dplyr::relocate(stat, .before = pvalue)
+
 ```
 Export results
 ```{r}
