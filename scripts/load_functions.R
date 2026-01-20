@@ -3,12 +3,12 @@ if (species == "human") {
   dataset <- "hsapiens_gene_ensembl"
   symbol <- "hgnc_symbol"
   organism <- "org.Hs.eg.db"
-  db_species <- "HS" # to be implemented into msigdbr
+  db_species <- "HS"
 } else if (species == "mouse") {
   dataset <- "mmusculus_gene_ensembl"
   symbol <- "mgi_symbol"
   organism <- "org.Mm.eg.db"
-  db_species <- "MM" # to be implemented into msigdbr
+  db_species <- "MM"
 } else if (species == "pig") {
   dataset <- "sscrofa_gene_ensembl"
   symbol <- "hgnc_symbol"
