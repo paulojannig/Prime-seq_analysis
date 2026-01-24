@@ -133,8 +133,8 @@ res <- lfcShrink(dds,
 
 #
 # res <- results(dds,
-#                contrast = list("GroupHIHGAS",
-#                                "GroupLILGAS"))
+#                contrast = list("",
+#                                ""))
 # res <- results(dds,
 #                contrast = c("Group", group, group_ref))
 
