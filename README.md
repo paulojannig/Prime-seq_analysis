@@ -48,7 +48,7 @@ git clone https://github.com/sdparekh/zUMIs.git
 
 ```bash
 cd ~/github_resources/Prime-seq_analysis
-screen
+tmux new -s primeseq
 ```
 
 ```bash
@@ -167,5 +167,11 @@ nohup ./scripts/02.primeseq_zUMIs.sh >> log.02.primeseq_zUMIs.txt
 
 ## ✅ Notes:
 
-* Always monitor your log files for errors (`tail -f log.XX.txt`)
+* Always monitor your log files for errors (log.01.primeseq_QC.txt and log.02.primeseq_zUMIs.txt)
+
+## tmux quick cheatsheet:
+- New session: `tmux new -s session_name` or simply `tmux``
+- List sessions: `tmux ls`
+- Attach: `tmux attach -t session_name`
+- Detach: `Ctrl-b d`
 
