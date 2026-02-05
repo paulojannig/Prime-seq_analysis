@@ -587,12 +587,13 @@ sprintf('number of genes expressed in more than %s samples with counts greater t
 
 Remove unwanted gene categories
 ```{r}
-excluded.genes <- union_all(
-  mito_genes$ensembl_gene_id, # removes mitochondrial-encoded genes
-  rRNA_genes$ensembl_gene_id # remove rRNA genes
-  # RiboRelated_genes$ensembl_gene_id # Optionally, remove ribosome-related genes
-)
+excluded.genes <- unique(c(
+  mito_genes$ensembl_gene_id,        # mitochondrial genes
+  rRNA_genes$ensembl_gene_id        # rRNA genes
+  # RiboRelated_genes$ensembl_gene_id  # ribosome-related genes
+))
 sprintf("%s genes were removed", length(excluded.genes))
+
 ```
 
 Final set of retained genes

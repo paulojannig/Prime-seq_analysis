@@ -133,8 +133,8 @@ res <- lfcShrink(dds,
 
 #
 # res <- results(dds,
-#                contrast = list("GroupHIHGAS",
-#                                "GroupLILGAS"))
+#                contrast = list("",
+#                                ""))
 # res <- results(dds,
 #                contrast = c("Group", group, group_ref))
 
@@ -166,10 +166,17 @@ wald <- results(dds,
                contrast = c("Group", group, group_ref)) %>%
   as.data.frame() %>%
   rownames_to_column("ensembl_gene_id") %>%
-  select(ensembl_gene_id, stat)
+  dplyr::select(ensembl_gene_id, stat)
+
+# wald <- results(dds, 
+#                 name=contrast) %>%
+#   as.data.frame() %>%
+#   rownames_to_column("ensembl_gene_id") %>%
+#   dplyr::select(ensembl_gene_id, stat)
 
 df <- left_join(df, wald, by = "ensembl_gene_id") %>%
   dplyr::relocate(stat, .before = pvalue)
+
 
 ```
 Export results
