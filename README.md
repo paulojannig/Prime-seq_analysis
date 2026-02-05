@@ -170,7 +170,7 @@ nohup ./scripts/02.primeseq_zUMIs.sh >> log.02.primeseq_zUMIs.txt
 * Always monitor your log files for errors (log.01.primeseq_QC.txt and log.02.primeseq_zUMIs.txt)
 
 ## tmux quick cheatsheet:
-- New session: `tmux new -s session_name` or simply `tmux``
+- New session: `tmux new -s session_name` or simply `tmux`
 - List sessions: `tmux ls`
 - Attach: `tmux attach -t session_name`
 - Detach: `Ctrl-b d`
