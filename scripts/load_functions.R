@@ -167,3 +167,41 @@ ggsave_fixed = function(file, plot = ggplot2::last_plot(),
                            height = unit(plot_height, units))
   ggsave(file, plot = pf, units = units, width = width, height = height, dpi = 300)
 }
+
+
+# Plotting QC metrics function ===============================
+plot_qc_metric <- function(data, 
+                           metric, 
+                           y_label) {
+
+  y_values <- data[[metric]]
+  y_max <- max(y_values, na.rm = TRUE)
+  y_min <- min(y_values, na.rm = TRUE)
+  y_lim <- ceiling(y_max * 1.1)
+  sample_number <- nrow(data)
+
+  ggplot(data, aes(x = Sample, y = .data[[metric]], fill = Group)) +
+    geom_bar(stat = "identity") +
+    geom_hline(yintercept = y_max, linetype = "dashed", size = 0.25) +
+    geom_hline(yintercept = y_min, linetype = "dashed", size = 0.25) +
+    annotate("text",
+      x = 1, y = y_max,
+      label = paste("Max:", scales::comma(y_max, decimal.mark = ".", big.mark = "")),
+      vjust = -0.3, hjust = 0, size = 6 / ggplot2:::.pt
+    ) +
+    annotate("text",
+      x = sample_number, y = y_min,
+      label = paste("Min:", scales::comma(y_min, decimal.mark = ".", big.mark = "")),
+      vjust = 1.5, hjust = 1, size = 6 / ggplot2:::.pt
+    ) +
+    labs(x = "Sample", y = y_label, title = y_label) +
+    #scale_fill_brewer(palette = palette, name = "Group") +
+    ggplot2::scale_fill_manual(values = palette_groups) +
+    gg_theme() +
+    theme(
+      axis.text.x = ggtext::element_markdown(angle = 45, hjust = 1),
+      legend.position = "top"
+    ) +
+    coord_cartesian(xlim = c(0, sample_number + 1), ylim = c(0, y_lim), expand = FALSE)
+}
+

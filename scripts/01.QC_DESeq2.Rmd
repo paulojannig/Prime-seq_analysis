@@ -15,10 +15,13 @@ output:
 ---
 
 ```{r, include = FALSE}
+# https://bookdown.org/yihui/rmarkdown-cookbook/cache-lazy.html
 knitr::opts_chunk$set(
-  collapse = TRUE,
+  collapse = FALSE,
   comment = "#>",
   echo = TRUE,
+  cache = FALSE,
+  cache.lazy= FALSE,
   warning = FALSE,
   message = FALSE
 )
@@ -56,9 +59,14 @@ required_Packages_Install <- c(
   "scales",
   "writexl",
   "readxl",
-  "factoextra",
-  "limma"
+  "factoextra"
 )
+
+# Ensure BiocManager is installed for Bioconductor packages
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+library(BiocManager)
 
 for(Package in required_Packages_Install){
   if(!require(Package,character.only = TRUE)) { 

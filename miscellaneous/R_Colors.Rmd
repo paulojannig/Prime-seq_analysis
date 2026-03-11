@@ -1,14 +1,35 @@
+---
+title: "QC and DESeq2"
+subtitle: "Prime-seq analysis"
+author: "Data analysis: Paulo Jannig | Karolinska Institutet"
+date: "`r paste('Last update:', format(Sys.time(), '%B %d, %Y'))`"
+output: 
+  html_document:
+    toc: true
+    toc_float: 
+      collapsed: false
+    toc_depth: 3
+    number_sections: true
+    theme: spacelab
+    highlight: default
+---
 
 # RcolorBrewer:
 
 RColorBrewer is an R package that contains a ready-to-use color palettes for creating beautiful graphics.
 
-```R
+```{r}
 install.packages("RColorBrewer")
 library(RColorBrewer)
 ```
 
-```R
+
+```{r}
+install.packages("RColorBrewer")
+library(RColorBrewer)
+```
+
+```{r}
 # To display all the color palettes in the package
 display.brewer.all()
 
@@ -28,7 +49,6 @@ palette_pca <- brewer.pal(n = 12, name = "Paired")
 
 display.brewer.pal(n = 11, name = 'RdBu')
 brewer.pal(n = 11, name = "RdBu")
-
 ```
 
 # [Scientific colour maps](https://www.fabiocrameri.ch/colourmaps/)
@@ -37,12 +57,12 @@ https://github.com/thomasp85/scico
 https://thomasp85.r-universe.dev/scico/doc/manual.html
 <br>The ’scico’ package provides access to the perceptually uniform and colour-blindness friendly palettes 
 
-```R
+```{r}
 install.packages("scico")
 library(scico)
 ```
 
-```R
+```{r}
 scico_palette_show()
 scico(30, palette = 'lapaz')
 
@@ -75,7 +95,6 @@ palette_scico <- scico(5, palette = "navia")
 pca + ggplot2::scale_color_manual(values = palette_scico) + 
   ggplot2::scale_fill_manual(values = palette_scico)
 ```
-
 
 ---
 # Links:
